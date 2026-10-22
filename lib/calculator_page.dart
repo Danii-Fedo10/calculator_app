@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'calc_button.dart';
 import 'calculator_engine.dart';
@@ -10,9 +13,15 @@ class CalculatorPage extends StatefulWidget {
   State<CalculatorPage> createState() => _CalculatorPageState();
 }
 
-class _CalculatorPageState extends State<CalculatorPage> {
+class _CalculatorPageState extends State<CalculatorPage>
+    with WidgetsBindingObserver {
   final _engine = CalculatorEngine();
   bool _secondFunctions = false;
+  bool _isLoading = true;
+  SharedPreferences? _preferences;
+  Future<void> _pendingSave = Future<void>.value();
+
+  static const _savedStateKey = 'calculator_state_v1';
 
   static const _rows = [
     ['RAD', '2nd', 'MC', 'MR', 'AC'],
@@ -25,6 +34,90 @@ class _CalculatorPageState extends State<CalculatorPage> {
     ['1', '2', '3', '−', '±'],
     ['0', '.', '=', '+', ''],
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _restoreState();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _saveState();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      _saveState();
+    }
+  }
+
+  Future<void> _restoreState() async {
+    Object? loadError;
+    try {
+      final preferences = await SharedPreferences.getInstance();
+      _preferences = preferences;
+      final savedState = preferences.getString(_savedStateKey);
+      if (savedState != null) {
+        final decoded = jsonDecode(savedState);
+        if (decoded is! Map<String, dynamic> ||
+            decoded['engine'] is! Map<String, dynamic> ||
+            decoded['secondFunctions'] is! bool) {
+          throw const FormatException('Saved calculator state is invalid.');
+        }
+        _engine.restoreState(decoded['engine'] as Map<String, dynamic>);
+        _secondFunctions = decoded['secondFunctions'] as bool;
+      }
+    } catch (error) {
+      loadError = error;
+    }
+
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+    if (loadError != null) {
+      _showStorageError('load', loadError);
+    }
+  }
+
+  void _saveState() {
+    final preferences = _preferences;
+    if (preferences == null) return;
+    late final String snapshot;
+    try {
+      snapshot = jsonEncode({
+        'engine': _engine.exportState(),
+        'secondFunctions': _secondFunctions,
+      });
+    } catch (error) {
+      _showStorageError('save', error);
+      return;
+    }
+    _pendingSave = _pendingSave
+        .then<void>((_) async {
+          final saved = await preferences.setString(_savedStateKey, snapshot);
+          if (!saved) {
+            throw StateError('The saved calculator state was not written.');
+          }
+        })
+        .catchError((Object error) {
+          _showStorageError('save', error);
+        });
+  }
+
+  void _showStorageError(String action, Object error) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(content: Text('Could not $action calculator data: $error')),
+      );
+  }
 
   String _visibleLabel(String label) {
     if (!_secondFunctions) return label;
@@ -45,7 +138,7 @@ class _CalculatorPageState extends State<CalculatorPage> {
   }
 
   void _onPressed(String originalLabel) {
-    if (originalLabel.isEmpty) return;
+    if (originalLabel.isEmpty || _isLoading) return;
     final label = _visibleLabel(originalLabel);
 
     setState(() {
@@ -101,6 +194,7 @@ class _CalculatorPageState extends State<CalculatorPage> {
           _engine.inputDigit(label);
       }
     });
+    _saveState();
   }
 
   bool _isOperator(String label) => '÷×−+='.contains(label);
@@ -112,14 +206,92 @@ class _CalculatorPageState extends State<CalculatorPage> {
   String _buttonLabel(String label) =>
       label == 'RAD' ? _engine.angleUnit : _visibleLabel(label);
 
+  Future<void> _showHistory() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: FractionallySizedBox(
+          heightFactor: 0.75,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 4, 12, 8),
+                child: Row(
+                  children: [
+                    Text('History', style: Theme.of(context).textTheme.titleLarge),
+                    const Spacer(),
+                    TextButton(
+                      key: const Key('clear_history'),
+                      onPressed: _engine.history.isEmpty
+                          ? null
+                          : () {
+                              setState(_engine.clearHistory);
+                              _saveState();
+                              Navigator.pop(sheetContext);
+                            },
+                      child: const Text('Clear all'),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: _engine.history.isEmpty
+                    ? const Center(child: Text('No calculations yet'))
+                    : ListView.separated(
+                        itemCount: _engine.history.length,
+                        separatorBuilder: (_, _) => const Divider(height: 1),
+                        itemBuilder: (context, index) {
+                          final entry = _engine.history[index];
+                          final localTime = entry.timestamp.toLocal();
+                          final time =
+                              '${localTime.hour.toString().padLeft(2, '0')}:'
+                              '${localTime.minute.toString().padLeft(2, '0')}';
+                          return ListTile(
+                            key: ValueKey('history_$index'),
+                            title: Text(entry.expression),
+                            subtitle: Text(time),
+                            trailing: Text(
+                              entry.result,
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                            onTap: () {
+                              setState(() => _engine.useHistoryEntry(entry));
+                              _saveState();
+                              Navigator.pop(sheetContext);
+                            },
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
 
     return Scaffold(
+      appBar: AppBar(
+        title: const Text('Scientific calculator'),
+        actions: [
+          IconButton(
+            key: const Key('history_button'),
+            tooltip: 'History',
+            onPressed: _isLoading ? null : _showHistory,
+            icon: const Icon(Icons.history),
+          ),
+        ],
+      ),
       body: SafeArea(
         child: Column(
           children: [
+            if (_isLoading) const LinearProgressIndicator(),
             Expanded(
               flex: 2,
               child: Container(
@@ -155,9 +327,11 @@ class _CalculatorPageState extends State<CalculatorPage> {
             ),
             Expanded(
               flex: 7,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(8, 2, 8, 8),
-                child: Column(
+              child: IgnorePointer(
+                ignoring: _isLoading,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 2, 8, 8),
+                  child: Column(
                   children: [
                     for (final row in _rows)
                       Expanded(
@@ -192,6 +366,7 @@ class _CalculatorPageState extends State<CalculatorPage> {
                         ),
                       ),
                   ],
+                ),
                 ),
               ),
             ),

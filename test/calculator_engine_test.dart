@@ -41,6 +41,7 @@ void main() {
       ..inputDigit('4')
       ..equals();
     expect(calc.display, '9');
+    expect(calc.history.map((entry) => entry.expression), ['5 + 4', '2 + 3']);
   });
 
   test('division by zero shows Error and recovers', () {
@@ -158,6 +159,30 @@ void main() {
       ..inputDigit('3')
       ..equals();
     expect(calc.display, '5');
+  });
+
+  test('exports and restores pending operations and calculation history', () {
+    calc
+      ..toggleAngleUnit()
+      ..inputDigit('2')
+      ..inputOperator('+')
+      ..inputDigit('3')
+      ..equals()
+      ..memoryAdd()
+      ..inputDigit('4')
+      ..inputOperator('×');
+
+    final restored = CalculatorEngine()..restoreState(calc.exportState());
+
+    expect(restored.display, '4');
+    expect(restored.angleUnit, 'DEG');
+    expect(restored.expression, '4 ×');
+    expect(restored.history, hasLength(1));
+    expect(restored.history.single.expression, '2 + 3');
+    restored
+      ..clear()
+      ..memoryRecall();
+    expect(restored.display, '5');
   });
 
   test('invalid scientific operations show Error and recover', () {
