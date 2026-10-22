@@ -21,9 +21,13 @@ class CalcButton extends StatelessWidget {
       style: FilledButton.styleFrom(
         backgroundColor: backgroundColor,
         foregroundColor: foregroundColor,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        padding: EdgeInsets.zero,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
-      child: Text(label, style: const TextStyle(fontSize: 28)),
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Text(label, style: const TextStyle(fontSize: 20)),
+      ),
     );
   }
 }

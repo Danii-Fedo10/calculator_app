@@ -12,18 +12,52 @@ class CalculatorPage extends StatefulWidget {
 
 class _CalculatorPageState extends State<CalculatorPage> {
   final _engine = CalculatorEngine();
+  bool _secondFunctions = false;
 
   static const _rows = [
-    ['C', '⌫', '%', '÷'],
-    ['7', '8', '9', '×'],
-    ['4', '5', '6', '−'],
-    ['1', '2', '3', '+'],
-    ['±', '0', '.', '='],
+    ['RAD', '2nd', 'MC', 'MR', 'AC'],
+    ['x²', 'xʸ', '√x', 'ʸ√x', '1/x'],
+    ['sin', 'cos', 'tan', 'ln', 'log'],
+    ['x!', 'eˣ', '10ˣ', 'π', 'e'],
+    ['M+', 'M−', '%', '⌫', 'CE'],
+    ['7', '8', '9', '÷', ''],
+    ['4', '5', '6', '×', ''],
+    ['1', '2', '3', '−', '±'],
+    ['0', '.', '=', '+', ''],
   ];
 
-  void _onPressed(String label) {
+  String _visibleLabel(String label) {
+    if (!_secondFunctions) return label;
+    return switch (label) {
+      'sin' => 'sin⁻¹',
+      'cos' => 'cos⁻¹',
+      'tan' => 'tan⁻¹',
+      'x²' => '√x',
+      '√x' => 'x²',
+      'ln' => 'eˣ',
+      'eˣ' => 'ln',
+      'log' => '10ˣ',
+      '10ˣ' => 'log',
+      'xʸ' => 'ʸ√x',
+      'ʸ√x' => 'xʸ',
+      _ => label,
+    };
+  }
+
+  void _onPressed(String originalLabel) {
+    if (originalLabel.isEmpty) return;
+    final label = _visibleLabel(originalLabel);
+
     setState(() {
       switch (label) {
+        case 'RAD':
+          _engine.toggleAngleUnit();
+        case '2nd':
+          _secondFunctions = !_secondFunctions;
+        case 'AC':
+          _engine.clear();
+        case 'CE':
+          _engine.clearEntry();
         case 'C':
           _engine.clear();
         case '⌫':
@@ -36,8 +70,33 @@ class _CalculatorPageState extends State<CalculatorPage> {
           _engine.inputDecimal();
         case '=':
           _engine.equals();
-        case '÷' || '×' || '−' || '+':
+        case 'MC':
+          _engine.memoryClear();
+        case 'MR':
+          _engine.memoryRecall();
+        case 'M+':
+          _engine.memoryAdd();
+        case 'M−':
+          _engine.memorySubtract();
+        case 'π' || 'e':
+          _engine.useConstant(label);
+        case '÷' || '×' || '−' || '+' || 'xʸ' || 'ʸ√x':
           _engine.inputOperator(label);
+        case 'x²' ||
+              '√x' ||
+              '1/x' ||
+              'x!' ||
+              'sin' ||
+              'cos' ||
+              'tan' ||
+              'sin⁻¹' ||
+              'cos⁻¹' ||
+              'tan⁻¹' ||
+              'ln' ||
+              'log' ||
+              'eˣ' ||
+              '10ˣ':
+          _engine.applyFunction(label);
         default:
           _engine.inputDigit(label);
       }
@@ -45,7 +104,13 @@ class _CalculatorPageState extends State<CalculatorPage> {
   }
 
   bool _isOperator(String label) => '÷×−+='.contains(label);
-  bool _isAction(String label) => ['C', '⌫', '%', '±'].contains(label);
+
+  bool _isAction(String label) =>
+      {'AC', 'CE', 'C', '⌫', '±', '%', 'RAD', '2nd', 'MC', 'MR', 'M+', 'M−'}
+          .contains(label);
+
+  String _buttonLabel(String label) =>
+      label == 'RAD' ? _engine.angleUnit : _visibleLabel(label);
 
   @override
   Widget build(BuildContext context) {
@@ -59,7 +124,7 @@ class _CalculatorPageState extends State<CalculatorPage> {
               flex: 2,
               child: Container(
                 alignment: Alignment.bottomRight,
-                padding: const EdgeInsets.all(24),
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.end,
                   crossAxisAlignment: CrossAxisAlignment.end,
@@ -67,9 +132,9 @@ class _CalculatorPageState extends State<CalculatorPage> {
                     Text(
                       _engine.expression,
                       key: const Key('expression'),
-                      style: TextStyle(fontSize: 20, color: scheme.outline),
+                      style: TextStyle(fontSize: 18, color: scheme.outline),
                     ),
-                                       const SizedBox(height: 8),
+                    const SizedBox(height: 8),
                     Flexible(
                       child: FittedBox(
                         fit: BoxFit.scaleDown,
@@ -78,7 +143,7 @@ class _CalculatorPageState extends State<CalculatorPage> {
                           key: const Key('display'),
                           maxLines: 1,
                           style: const TextStyle(
-                            fontSize: 72,
+                            fontSize: 68,
                             fontWeight: FontWeight.w300,
                           ),
                         ),
@@ -89,9 +154,9 @@ class _CalculatorPageState extends State<CalculatorPage> {
               ),
             ),
             Expanded(
-              flex: 5,
+              flex: 7,
               child: Padding(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.fromLTRB(8, 2, 8, 8),
                 child: Column(
                   children: [
                     for (final row in _rows)
@@ -100,24 +165,28 @@ class _CalculatorPageState extends State<CalculatorPage> {
                           children: [
                             for (final label in row)
                               Expanded(
-                                child: Padding(
-                                  padding: const EdgeInsets.all(6),
-                                  child: CalcButton(
-                                    key: ValueKey('key_$label'),
-                                    label: label,
-                                    onPressed: () => _onPressed(label),
-                                    backgroundColor: _isOperator(label)
-                                        ? scheme.primary
-                                        : _isAction(label)
-                                        ? scheme.secondaryContainer
-                                        : scheme.surfaceContainerHighest,
-                                    foregroundColor: _isOperator(label)
-                                        ? scheme.onPrimary
-                                        : _isAction(label)
-                                        ? scheme.onSecondaryContainer
-                                        : scheme.onSurface,
-                                  ),
-                                ),
+                                child: label.isEmpty
+                                    ? const SizedBox.shrink()
+                                    : Padding(
+                                        padding: const EdgeInsets.all(3),
+                                        child: CalcButton(
+                                          key: ValueKey('key_$label'),
+                                          label: _buttonLabel(label),
+                                          onPressed: () => _onPressed(label),
+                                          backgroundColor:
+                                              _isOperator(label)
+                                              ? scheme.primary
+                                              : _isAction(label)
+                                              ? scheme.secondaryContainer
+                                              : scheme.surfaceContainerHighest,
+                                          foregroundColor:
+                                              _isOperator(label)
+                                              ? scheme.onPrimary
+                                              : _isAction(label)
+                                              ? scheme.onSecondaryContainer
+                                              : scheme.onSurface,
+                                        ),
+                                      ),
                               ),
                           ],
                         ),

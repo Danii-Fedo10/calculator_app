@@ -78,6 +78,99 @@ void main() {
     expect(calc.display, '4');
   });
 
+  test('uses radians by default and supports degree mode', () {
+    expect(calc.angleUnit, 'RAD');
+    calc
+      ..useConstant('π')
+      ..applyFunction('sin');
+    expect(calc.display, '0');
+
+    calc
+      ..toggleAngleUnit()
+      ..inputDigit('9')
+      ..inputDigit('0')
+      ..applyFunction('sin');
+    expect(calc.angleUnit, 'DEG');
+    expect(calc.display, '1');
+  });
+
+  test('supports inverse trigonometric functions in the selected unit', () {
+    calc
+      ..toggleAngleUnit()
+      ..inputDigit('1')
+      ..applyFunction('sin⁻¹');
+    expect(calc.display, '90');
+  });
+
+  test('supports powers, roots, and reciprocal', () {
+    calc
+      ..inputDigit('2')
+      ..inputOperator('xʸ')
+      ..inputDigit('3')
+      ..equals();
+    expect(calc.display, '8');
+
+    calc
+      ..inputDigit('2')
+      ..inputDigit('7')
+      ..inputOperator('ʸ√x')
+      ..inputDigit('3')
+      ..equals();
+    expect(calc.display, '3');
+
+    calc
+      ..inputDigit('4')
+      ..applyFunction('1/x');
+    expect(calc.display, '0.25');
+  });
+
+  test('supports logarithms, factorial, and memory', () {
+    calc
+      ..inputDigit('1')
+      ..inputDigit('0')
+      ..inputDigit('0')
+      ..applyFunction('log');
+    expect(calc.display, '2');
+
+    calc
+      ..inputDigit('5')
+      ..applyFunction('x!');
+    expect(calc.display, '120');
+
+    calc
+      ..inputDigit('4')
+      ..memoryAdd()
+      ..clear()
+      ..memoryRecall();
+    expect(calc.display, '4');
+  });
+
+  test('clears the current entry without losing a pending operation', () {
+    calc
+      ..inputDigit('2')
+      ..inputOperator('+')
+      ..inputDigit('8')
+      ..clearEntry();
+    expect(calc.display, '0');
+    expect(calc.expression, '2 +');
+
+    calc
+      ..inputDigit('3')
+      ..equals();
+    expect(calc.display, '5');
+  });
+
+  test('invalid scientific operations show Error and recover', () {
+    calc
+      ..inputDigit('9')
+      ..toggleSign()
+      ..applyFunction('√x');
+    expect(calc.display, 'Error');
+
+    calc.inputDigit('2');
+    expect(calc.display, '2');
+  });
+
   test('backspace, sign toggle and clear', () {
     calc
       ..inputDigit('1')
